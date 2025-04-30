@@ -189,11 +189,11 @@ fn from_path(aln: Alignment, query: &[u8], ref_seq: &[u8]) -> (String, String, f
             query_string.push(query[*query_pos - 1] as char);
             mismatches += 1;
         } else if *state == AlignmentOperation::Ins {
-            query_string.push(query[*query_pos] as char);
+            query_string.push(query[*query_pos - 1] as char);
             ref_string.push('-');
             gaps += 1;
         } else if *state == AlignmentOperation::Del {
-            ref_string.push(ref_seq[*ref_pos] as char);
+            ref_string.push(ref_seq[*ref_pos - 1] as char);
             query_string.push('-');
             gaps += 1;
         }
