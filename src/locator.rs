@@ -38,14 +38,16 @@
 ///
 /// # Example
 /// ```rust
+/// use virust_locator::locator::Locator;
+/// use virust_locator::config::Args;
 /// let args = Args {
-///     query: "ATTAACAGAGATTTGTGAAGAAATGGAAAAGGAAGGAAAAATTACAAAAATTGGGCCTGAAAATCCATATAACACTCCAATATTTGCCATAAAAAAGAAGGACAGTACTAAGTGGAGAAAATTAGTAGATTTCAGAGAGCTCAATAAAAGAACTCAAGACTTTTGGGAGGTTCAATTAGGAATACCACACCCAGCAGGGTTAAAAAAGAAAAAATCAGTGACAGTACTGGATGTGGGGGATGCATATTTTTCTGTTCCTTTAGATG".to_string(),
+///     query: vec!["ATTAACAGAGATTTGTGAAGAAATGGAAAAGGAAGGAAAAATTACAAAAATTGGGCCTGAAAATCCATATAACACTCCAATATTTGCCATAAAAAAGAAGGACAGTACTAAGTGGAGAAAATTAGTAGATTTCAGAGAGCTCAATAAAAGAACTCAAGACTTTTGGGAGGTTCAATTAGGAATACCACACCCAGCAGGGTTAAAAAAGAAAAAATCAGTGACAGTACTGGATGTGGGGGATGCATATTTTTCTGTTCCTTTAGATG".to_string()],
 ///     reference: "HXB2".to_string(),
 ///     type_query: "nt".to_string(),
 ///     algorithm: 1,
 /// };
 ///
-/// let locator = Locator::build(&args).unwrap().unwrap();
+/// let locator = Locator::build(&args).unwrap().pop().unwrap().unwrap();
 /// println!("{}", locator);
 /// ```
 use crate::config::Args;
@@ -101,8 +103,12 @@ impl Locator {
         }
     }
 
-    pub fn build(args: &Args) -> Result<Option<Locator>, Box<dyn Error>> {
-        let query = args.query.as_bytes();
+    pub fn build(args: &Args) -> Result<Vec<Option<Locator>>, Box<dyn Error>> {
+        let query_vec = args
+            .query
+            .iter()
+            .map(|x| x.as_bytes())
+            .collect::<Vec<&[u8]>>();
 
         let ref_seq = retrieve_reference_sequence(&args.reference, &args.type_query)?.sequence;
 
@@ -110,36 +116,42 @@ impl Locator {
 
         let score = |a: u8, b: u8| if a == b { 1i32 } else { -1i32 };
 
-        if query.len() < 300 || algorithm == 1 {
-            let loc = algorithm1(query, ref_seq, score)?;
-            return Ok(loc);
-        } else {
-            let s1 = &query[..100];
-            let s2 = &query[query.len() - 100..];
-
-            let aln1 = pattern_match(s1, ref_seq, 30);
-
-            if aln1.is_none() {
+        let mut result_vec = Vec::new();
+        for query in query_vec {
+            if query.len() < 300 || algorithm == 1 {
                 let loc = algorithm1(query, ref_seq, score)?;
-                return Ok(loc);
+                result_vec.push(loc);
+            } else {
+                let s1 = &query[..100];
+                let s2 = &query[query.len() - 100..];
+
+                let aln1 = pattern_match(s1, ref_seq, 30);
+
+                if aln1.is_none() {
+                    let loc = algorithm1(query, ref_seq, score)?;
+                    result_vec.push(loc);
+                    continue;
+                }
+                let pos_start = aln1.unwrap().ystart as usize;
+
+                let aln2 = pattern_match(s2, ref_seq, 30);
+
+                if aln2.is_none() {
+                    let loc = algorithm1(query, ref_seq, score)?;
+                    result_vec.push(loc);
+                    continue;
+                }
+                let pos_end = aln2.unwrap().yend as usize;
+
+                let refined_ref = &ref_seq[pos_start..pos_end];
+
+                let mut loc = algorithm1(query, refined_ref, score)?.unwrap();
+                loc.ref_start = pos_start + 1;
+                loc.ref_end = pos_end;
+                result_vec.push(Some(loc));
             }
-            let pos_start = aln1.unwrap().ystart as usize;
-
-            let aln2 = pattern_match(s2, ref_seq, 30);
-
-            if aln2.is_none() {
-                let loc = algorithm1(query, ref_seq, score)?;
-                return Ok(loc);
-            }
-            let pos_end = aln2.unwrap().yend as usize;
-
-            let refined_ref = &ref_seq[pos_start..pos_end];
-
-            let mut loc = algorithm1(query, refined_ref, score)?.unwrap();
-            loc.ref_start = pos_start + 1;
-            loc.ref_end = pos_end;
-            return Ok(Some(loc));
         }
+        return Ok(result_vec);
     }
 }
 
@@ -237,7 +249,7 @@ mod test {
         83.98576512455516,
         true,
         "ATTAACAGAGATTTGTGAAGAAATGGAAAAGGAAGGAAAAATTACAAAAATTGGGCCTGAAAATCCATATAACACTCCAATATTTGCCATAAAAAAGAAGGACAGTACTAAGTGGAGAAAATTAGTAGATTTCAGAGAGCTCAATAAAAGAACTCAAGACTTTTGGGAGGTTCAATTAGGAATACCACACCCAGCAGGGTTAAAAAAGAAAAAATCAGTGACAGTACTGGATGTGGGGGATGCATATTTTTCTGTTCCTTTAGATG-----------------------------------AGTGTAAACAATGAAACACCAGGGATTAGATATCAATATAATGTGCTACCACAGGGGTGGAAAGGATCACCATCAATATTCCAGAGTAGCATGACAAAAATCTTAGAGCCCTTTAGAGCAAAAAACCCAGAAATAGTCATCTATCAATATATGGATGACTTATGTGTAGGATCTGACTTAGAAATAGGGCAACATAGAGCAAAAATAGAGGAGTTAAGAGAACATCTATTGAAGTGGGGATTGACCACACCAGACAAGAAA",
-        "ATTAGTAGAAATTTGTACAGAGATGGAAAAGGAAGGGAAAATTTCAAAAATTGGGCCTGAAAATCCATACAATACTCCAGTATTTGCCATAAAGAAAAAAGACAGTACTAAATGGAGAAAATTAGTAGATTTCAGAGAACTTAATAAGAGAACTCAAGACTTCTGGGAAGTTCAATTAGGAATACCACATCCCGCAGGGTTAAAAAAGAAAAAATCAGTAACAGTACTGGATGTGGGTGATGCATATTTTTCAGTTCCCTTAGATGAGACTTCAGGAAGTATACTGCATTTACCATACCTAAGTATAAACAATGAGACACCAGGGATTAGATATCAGTACAATGTGCTTCCACAGGGATGGAAAGGATCACCAGCAATATTCCAAAGTAGCATGACAAAAATCTTAGAGCCTTTTAGAAAACAAAATCCAGACATAGTTATCTATCAATACATGGATGATTTGTATGTAGGATCTGACTTAGAAATAGGGCAGCATAGAACAAAAATAGAGGAGCTGAGACAACATCTGTTGAGGTGGGGACTTACCACACCAGACAAAAAA",
+        "ATTAGTAGAAATTTGTACAGAGATGGAAAAGGAAGGGAAAATTTCAAAAATTGGGCCTGAAAATCCATACAATACTCCAGTATTTGCCATAAAGAAAAAAGACAGTACTAAATGGAGAAAATTAGTAGATTTCAGAGAACTTAATAAGAGAACTCAAGACTTCTGGGAAGTTCAATTAGGAATACCACATCCCGCAGGGTTAAAAAAGAAAAAATCAGTAACAGTACTGGATGTGGGTGATGCATATTTTTCAGTTCCCTTAGATGAAGACTTCAGGAAGTATACTGCATTTACCATACCTAGTATAAACAATGAGACACCAGGGATTAGATATCAGTACAATGTGCTTCCACAGGGATGGAAAGGATCACCAGCAATATTCCAAAGTAGCATGACAAAAATCTTAGAGCCTTTTAGAAAACAAAATCCAGACATAGTTATCTATCAATACATGGATGATTTGTATGTAGGATCTGACTTAGAAATAGGGCAGCATAGAACAAAAATAGAGGAGCTGAGACAACATCTGTTGAGGTGGGGACTTACCACACCAGACAAAAAA",
     );
 
     static TWO_LOC: (i32, i32, f64, bool, &'static str, &'static str) = (
@@ -288,13 +300,13 @@ mod test {
         );
 
         let my_arg = Args {
-            query: MY_ARGS.0.to_string(),
+            query: vec![MY_ARGS.0.to_string()],
             reference: MY_ARGS.1.to_string(),
             type_query: MY_ARGS.2.to_string(),
             algorithm: MY_ARGS.3,
         };
 
-        let loc = Locator::build(&my_arg).unwrap().unwrap();
+        let loc = Locator::build(&my_arg).unwrap().pop().unwrap().unwrap();
 
         assert_eq!(loc.ref_start, targe_loc.ref_start);
         assert_eq!(loc.ref_end, targe_loc.ref_end);
@@ -317,13 +329,13 @@ mod test {
         );
 
         let my_arg = Args {
-            query: MY_ARGS.0.to_string(),
+            query: vec![MY_ARGS.0.to_string()],
             reference: MY_ARGS.1.to_string(),
             type_query: MY_ARGS.2.to_string(),
             algorithm: 2,
         };
 
-        let loc = Locator::build(&my_arg).unwrap().unwrap();
+        let loc = Locator::build(&my_arg).unwrap().pop().unwrap().unwrap();
 
         assert_eq!(loc.ref_start, targe_loc.ref_start);
         assert_eq!(loc.ref_end, targe_loc.ref_end);
@@ -345,13 +357,13 @@ mod test {
         );
 
         let my_arg = Args {
-            query: MY_ARGS2.0.to_string(),
+            query: vec![MY_ARGS2.0.to_string()],
             reference: MY_ARGS2.1.to_string(),
             type_query: MY_ARGS2.2.to_string(),
             algorithm: 1,
         };
 
-        let loc = Locator::build(&my_arg).unwrap().unwrap();
+        let loc = Locator::build(&my_arg).unwrap().pop().unwrap().unwrap();
 
         assert_eq!(loc.ref_start, targe_loc.ref_start);
         assert_eq!(loc.ref_end, targe_loc.ref_end);
@@ -369,13 +381,13 @@ mod test {
         );
 
         let my_arg = Args {
-            query: MY_ARGS2.0.to_string(),
+            query: vec![MY_ARGS2.0.to_string()],
             reference: MY_ARGS2.1.to_string(),
             type_query: MY_ARGS2.2.to_string(),
             algorithm: 2,
         };
 
-        let loc = Locator::build(&my_arg).unwrap().unwrap();
+        let loc = Locator::build(&my_arg).unwrap().pop().unwrap().unwrap();
 
         assert_eq!(loc.ref_start, targe_loc.ref_start);
         assert_eq!(loc.ref_end, targe_loc.ref_end);

@@ -62,8 +62,8 @@ use clap::{ColorChoice, Parser};
 )]
 pub struct Args {
     /// Query sequence
-    #[arg(short, long)]
-    pub query: String,
+    #[arg(short, long, use_value_delimiter = true, value_delimiter = ' ', num_args = 1..)]
+    pub query: Vec<String>,
 
     /// Reference genome, either HXB2 or SIVmm239
     #[arg(short, long, default_value = "HXB2")]
@@ -123,27 +123,37 @@ impl Args {
         if self.reference != "HXB2" && self.reference != "SIVmm239" {
             return Err("Reference genome must be either 'HXB2' or 'SIVmm239'".to_string());
         }
+        if self.query.is_empty() {
+            return Err(
+                "Query sequence cannot be empty, run `virust-locator -h` for more information"
+                    .to_string(),
+            );
+        }
         if self.type_query == "nt" && !self.query.is_empty() {
             let alphabet = alphabets::dna::iupac_alphabet();
-            if alphabet.is_word(self.query.as_bytes()) {
-                if self.query.len() <= 3 {
-                    return Err("Nucleotide sequence length too short".to_string());
+            for q in &self.query {
+                if alphabet.is_word(q.as_bytes()) {
+                    if q.len() <= 3 {
+                        return Err("Nucleotide sequence length too short".to_string());
+                    } else {
+                        return Ok(self);
+                    }
                 } else {
-                    return Ok(self);
+                    return Err("Invalid nucleotide sequence: ".to_string() + q);
                 }
-            } else {
-                return Err("Invalid nucleotide sequence: ".to_string() + &self.query);
             }
         } else if self.type_query == "aa" && !self.query.is_empty() {
             let alphabet = alphabets::protein::iupac_alphabet();
-            if alphabet.is_word(self.query.as_bytes()) {
-                if self.query.len() <= 3 {
-                    return Err("Amino acid sequence length too short".to_string());
+            for q in &self.query {
+                if alphabet.is_word(q.as_bytes()) {
+                    if q.len() <= 3 {
+                        return Err("Nucleotide sequence length too short".to_string());
+                    } else {
+                        return Ok(self);
+                    }
                 } else {
-                    return Ok(self);
+                    return Err("Invalid amino acid sequence: ".to_string() + q);
                 }
-            } else {
-                return Err("Invalid amino acid sequence: ".to_string() + &self.query);
             }
         }
         Ok(self)

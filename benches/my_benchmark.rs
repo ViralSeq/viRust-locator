@@ -17,7 +17,7 @@ fn run_locator() {
     let algorithm = 1;
 
     let args = virust_locator::config::Args {
-        query: query.to_string(),
+        query: vec![query.to_string()],
         reference: reference.to_string(),
         type_query,
         algorithm,
