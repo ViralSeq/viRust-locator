@@ -1,4 +1,4 @@
-use std::error::Error;
+use crate::BoxError;
 
 pub struct RefSeq<'a> {
     pub strain: &'a str,
@@ -6,7 +6,7 @@ pub struct RefSeq<'a> {
     pub sequence: &'a [u8],
 }
 
-pub fn retrieve_reference_sequence(reference: &str, sequence_type: &str) -> Result<&'static RefSeq<'static>, Box <dyn Error>> {
+pub fn retrieve_reference_sequence(reference: &str, sequence_type: &str) -> Result<&'static RefSeq<'static>, BoxError> {
     let reference_sequences = &REFS;
     for ref_seq in reference_sequences.iter() {
         if ref_seq.strain.to_uppercase() == reference.to_uppercase() && ref_seq.sequence_type.to_lowercase() == sequence_type.to_lowercase() {

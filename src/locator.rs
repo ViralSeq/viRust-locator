@@ -50,13 +50,14 @@
 /// let locator = Locator::build(&args).unwrap().pop().unwrap().unwrap();
 /// println!("{}", locator);
 /// ```
+use crate::BoxError;
 use crate::config::Args;
 use crate::reference::retrieve_reference_sequence;
 use bio::alignment::Alignment;
 use bio::alignment::AlignmentOperation;
 use bio::alignment::pairwise::*;
 use bio::pattern_matching::myers::long;
-use std::error::Error;
+use rayon::prelude::*;
 use std::fmt::Display;
 
 #[derive(Debug)]
@@ -103,7 +104,7 @@ impl Locator {
         }
     }
 
-    pub fn build(args: &Args) -> Result<Vec<Option<Locator>>, Box<dyn Error>> {
+    pub fn build(args: &Args) -> Result<Vec<Option<Locator>>, BoxError> {
         let query_vec = args
             .query
             .iter()
@@ -116,41 +117,38 @@ impl Locator {
 
         let score = |a: u8, b: u8| if a == b { 1i32 } else { -1i32 };
 
-        let mut result_vec = Vec::new();
-        for query in query_vec {
-            if query.len() < 300 || algorithm == 1 {
-                let loc = algorithm1(query, ref_seq, score)?;
-                result_vec.push(loc);
-            } else {
-                let s1 = &query[..100];
-                let s2 = &query[query.len() - 100..];
+        let result_vec = query_vec
+            .par_iter()
+            .map(|query| {
+                if query.len() < 300 || algorithm == 1 {
+                    algorithm1(query, &ref_seq, score)
+                } else {
+                    let s1 = &query[..100];
+                    let s2 = &query[query.len() - 100..];
 
-                let aln1 = pattern_match(s1, ref_seq, 30);
+                    let aln1 = pattern_match(s1, &ref_seq, 30);
 
-                if aln1.is_none() {
-                    let loc = algorithm1(query, ref_seq, score)?;
-                    result_vec.push(loc);
-                    continue;
+                    if aln1.is_none() {
+                        return algorithm1(query, &ref_seq, score);
+                    }
+                    let pos_start = aln1.unwrap().ystart as usize;
+
+                    let aln2 = pattern_match(s2, &ref_seq, 30);
+
+                    if aln2.is_none() {
+                        return algorithm1(query, &ref_seq, score);
+                    }
+                    let pos_end = aln2.unwrap().yend as usize;
+
+                    let refined_ref = &ref_seq[pos_start..pos_end];
+
+                    let mut loc = algorithm1(query, refined_ref, score)?.unwrap();
+                    loc.ref_start = pos_start + 1;
+                    loc.ref_end = pos_end;
+                    Ok(Some(loc))
                 }
-                let pos_start = aln1.unwrap().ystart as usize;
-
-                let aln2 = pattern_match(s2, ref_seq, 30);
-
-                if aln2.is_none() {
-                    let loc = algorithm1(query, ref_seq, score)?;
-                    result_vec.push(loc);
-                    continue;
-                }
-                let pos_end = aln2.unwrap().yend as usize;
-
-                let refined_ref = &ref_seq[pos_start..pos_end];
-
-                let mut loc = algorithm1(query, refined_ref, score)?.unwrap();
-                loc.ref_start = pos_start + 1;
-                loc.ref_end = pos_end;
-                result_vec.push(Some(loc));
-            }
-        }
+            })
+            .collect::<Result<Vec<Option<Locator>>, BoxError>>()?;
         return Ok(result_vec);
     }
 }
@@ -161,7 +159,7 @@ fn get_aln(
     score: fn(u8, u8) -> i32,
     gap_open: i32,
     gap_extend: i32,
-) -> Result<Alignment, Box<dyn Error>> {
+) -> Result<Alignment, BoxError> {
     let mut aligner =
         Aligner::with_capacity(query.len(), ref_seq.len(), gap_open, gap_extend, &score);
 
@@ -221,7 +219,7 @@ fn algorithm1(
     query: &[u8],
     ref_seq: &[u8],
     score: fn(u8, u8) -> i32,
-) -> Result<Option<Locator>, Box<dyn Error>> {
+) -> Result<Option<Locator>, BoxError> {
     let aln = get_aln(query, ref_seq, score, -5, -1)?;
     let ref_start = aln.ystart as usize;
     let ref_end = aln.yend as usize;

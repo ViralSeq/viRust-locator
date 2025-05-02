@@ -9,6 +9,7 @@ clap = { version = "4.5.37", features = ["derive"] }
 tap = "1"
 serde = { version = "1.0", features = ["derive"] }
 colored = "3"
+rayon = "1.10.0"
 
 [profile.dev]
 opt-level = 0
