@@ -1,7 +1,15 @@
 [package]
 name = "virust-locator"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
+authors = ["Shuntai Zhou <shuntai.zhou@gmail.com>"] 
+description = "A tool for generating sequence locators for HIV/SIV sequences, resembling the functionality of the LANL HIV-Locator tool."
+license = "MIT" 
+repository = "https://github.com/ViralSeq/viRust-locator" 
+documentation = "https://docs.rs/virust-locator" 
+keywords = ["bioinformatics", "HIV", "sequence", "alignment"] 
+categories = ["science", "bioinformatics"] 
+readme = "README.md" 
 
 [dependencies]
 bio = "2"

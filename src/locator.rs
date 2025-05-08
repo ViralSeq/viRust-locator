@@ -1,3 +1,19 @@
+//! This module defines the `Locator` struct and related functionality for locating and aligning
+//! query sequences against a reference sequence. It provides methods for alignment, pattern
+//! matching, and calculating alignment details such as percent identity and indels. The module
+//! also includes unit tests for validating the functionality of the `Locator` struct and its
+//! methods.
+
+use crate::BoxError;
+use crate::config::Args;
+use crate::reference::retrieve_reference_sequence;
+use bio::alignment::Alignment;
+use bio::alignment::AlignmentOperation;
+use bio::alignment::pairwise::*;
+use bio::pattern_matching::myers::long;
+use rayon::prelude::*;
+use std::fmt::Display;
+
 /// The `Locator` struct and its associated methods are used to locate and align a query sequence
 /// against a reference sequence. It provides functionality to calculate alignment details such as
 /// percent identity, indels, and aligned strings.
@@ -30,8 +46,8 @@
 /// # Usage
 /// The `Locator` struct is designed to be used in bioinformatics applications where sequence
 /// alignment is required. It supports two algorithms for alignment:
-/// - Algorithm 1: A semi-global alignment approach.
-/// - Algorithm 2: A combination of pattern matching and refinement.
+/// - Algorithm 1: A semi-global alignment approach. Slow and more accurate.
+/// - Algorithm 2: A combination of pattern matching and refinement. Faster but less accurate.
 ///
 /// The `Locator::build` method determines which algorithm to use based on the query length and
 /// user-specified parameters.
@@ -50,26 +66,26 @@
 /// let locator = Locator::build(&args).unwrap().pop().unwrap().unwrap();
 /// println!("{}", locator);
 /// ```
-use crate::BoxError;
-use crate::config::Args;
-use crate::reference::retrieve_reference_sequence;
-use bio::alignment::Alignment;
-use bio::alignment::AlignmentOperation;
-use bio::alignment::pairwise::*;
-use bio::pattern_matching::myers::long;
-use rayon::prelude::*;
-use std::fmt::Display;
-
 #[derive(Debug)]
 pub struct Locator {
+    /// The starting position of the reference sequence (1-based index).
     pub ref_start: usize, // starting from 1 on reference
-    pub ref_end: usize,   // inclusive
+    /// The ending position of the reference sequence (inclusive).
+    pub ref_end: usize, // inclusive
+    /// The percent identity of the alignment.
     pub percent_identity: f64,
+    /// Indicates whether there are indels (insertions or deletions) in the alignment.
     pub indel: bool,
+    /// The aligned string of the query sequence. Gaps are represented by '-'.
     pub query_aligned_string: String,
+    /// The aligned string of the reference sequence. Gaps are represented by '-'.
     pub ref_aligned_string: String,
 }
 
+/// Implements the `Display` trait for the `Locator` struct to provide a formatted string
+/// representation of the alignment details.
+/// The output format includes the reference start and end positions, percent identity,
+/// indel presence, aligned query string, and aligned reference string, separated by tabs.
 impl Display for Locator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -86,6 +102,7 @@ impl Display for Locator {
 }
 
 impl Locator {
+    /// Constructs a new `Locator` instance with the given alignment details.
     pub fn new(
         ref_start: usize,
         ref_end: usize,
@@ -104,6 +121,15 @@ impl Locator {
         }
     }
 
+    /// Builds a `Locator` instance by aligning a query sequence against a reference sequence using
+    /// the specified algorithm.
+    /// The method retrieves the reference sequence, performs alignment, and returns a vector of
+    /// `Locator` instances.
+    /// If the query length is less than 300 or the specified algorithm is 1, it uses the
+    /// `algorithm1` method for alignment.
+    /// If the query length is greater than or equal to 300, it uses a combination of pattern
+    /// matching and refinement.
+    /// The method returns a `Result` containing a vector of `Option<Locator>` instances.
     pub fn build(args: &Args) -> Result<Vec<Option<Locator>>, BoxError> {
         let query_vec = args
             .query
@@ -153,6 +179,17 @@ impl Locator {
     }
 }
 
+/// Performs a semi-global alignment between a query and reference sequence using a scoring
+/// function and gap penalties.
+/// The function takes the query sequence, reference sequence, scoring function, gap open penalty,
+/// and gap extend penalty as input and returns an `Alignment` object.
+/// The alignment is performed using the `bio::alignment::pairwise` module, which provides
+/// efficient algorithms for sequence alignment.
+/// The function returns a `Result` containing the `Alignment` object or an error if the alignment
+/// fails.
+/// The `score` function is used to calculate the score for matching or mismatching characters.
+/// The `gap_open` and `gap_extend` parameters specify the penalties for opening and extending gaps
+/// in the alignment.
 fn get_aln(
     query: &[u8],
     ref_seq: &[u8],
@@ -166,6 +203,10 @@ fn get_aln(
     Ok(aligner.semiglobal(query, ref_seq))
 }
 
+/// Uses the Myers bit-parallel algorithm to find approximate matches of a pattern in a text with a
+/// maximum allowed distance. It returns the best alignment found.
+/// The function takes a pattern, text, and maximum distance as input and returns an `Option<Alignment>`.
+/// If a match is found, it returns `Some(alignment)`, otherwise it returns `None`.
 fn pattern_match(pattern: &[u8], text: &[u8], max_dist: usize) -> Option<Alignment> {
     let mut myers = long::Myers::<u64>::new(pattern);
     let mut lazy_matches = myers.find_all_lazy(text, max_dist);
@@ -181,6 +222,13 @@ fn pattern_match(pattern: &[u8], text: &[u8], max_dist: usize) -> Option<Alignme
     }
 }
 
+/// Converts an alignment path into aligned strings, calculates percent identity, and determines
+/// the presence of indels.
+/// The function takes an `Alignment` object, query sequence, and reference sequence as input.
+/// It iterates through the alignment path, constructing aligned strings for both the query and
+/// reference sequences. It also counts mismatches and gaps to calculate the percent identity.
+/// The function returns a tuple containing the aligned reference string, aligned query string,
+/// percent identity, and a boolean indicating the presence of indels.
 fn from_path(aln: Alignment, query: &[u8], ref_seq: &[u8]) -> (String, String, f64, bool) {
     let mut ref_string = String::new();
     let mut query_string = String::new();
@@ -215,6 +263,13 @@ fn from_path(aln: Alignment, query: &[u8], ref_seq: &[u8]) -> (String, String, f
     (ref_string, query_string, percent_identity, indel)
 }
 
+/// Implements a specific alignment algorithm to align a query sequence against a reference
+/// sequence.
+/// The function takes the query sequence, reference sequence, and scoring function as input.
+/// It performs a semi-global alignment using the `get_aln` function and then converts the
+/// alignment path into aligned strings using the `from_path` function.
+/// The function returns a `Result` containing an `Option<Locator>`.
+/// If the alignment is successful, it returns `Some(locator)`, otherwise it returns `None`.
 fn algorithm1(
     query: &[u8],
     ref_seq: &[u8],

@@ -4,7 +4,7 @@ A simplified version of LANL HIV Database HIV Locator tool
 
 ## Usage
 
-Usage: virust-locator [OPTIONS] --query
+Usage: `cargo run -- [OPTIONS] --query`
 
 Options:
 

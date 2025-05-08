@@ -1,11 +1,20 @@
+//! Reference sequences for HIV-1 and SIVmm239
 use crate::BoxError;
 
+/// Struct to hold reference sequences
+/// Contains the strain name, sequence type (nt or aa), and the sequence itself
+/// The sequence is stored as a byte array
+#[derive(Debug)]
 pub struct RefSeq<'a> {
+    /// The strain name
     pub strain: &'a str,
+    /// The type of sequence (nt or aa)
     pub sequence_type: &'a str,
+    /// The sequence itself
     pub sequence: &'a [u8],
 }
 
+/// Function to retrieve a reference sequence by strain and sequence type
 pub fn retrieve_reference_sequence(reference: &str, sequence_type: &str) -> Result<&'static RefSeq<'static>, BoxError> {
     let reference_sequences = &REFS;
     for ref_seq in reference_sequences.iter() {
@@ -19,6 +28,8 @@ pub fn retrieve_reference_sequence(reference: &str, sequence_type: &str) -> Resu
     )))
 }
 
+
+/// Static array of reference sequences
 pub static REFS: [RefSeq; 4] = [
     RefSeq{
         strain: "HXB2",
