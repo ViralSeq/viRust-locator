@@ -66,7 +66,7 @@ use std::fmt::Display;
 /// let locator = Locator::build(&args).unwrap().pop().unwrap().unwrap();
 /// println!("{}", locator);
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Locator {
     /// The starting position of the reference sequence (1-based index).
     pub ref_start: usize, // starting from 1 on reference

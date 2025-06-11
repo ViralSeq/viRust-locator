@@ -4,6 +4,7 @@
 use std::error::Error;
 pub mod config;
 pub mod locator;
+pub mod prelude;
 pub mod reference;
 
 ///! This crate provides a set of utilities for working with the [OpenTelemetry](https://opentelemetry.io/) ecosystem.

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.4] - 2025-06-11
+
+### Added
+
+- `Clone` and `PartialEq` trait for struct `Locator`
+
+- `prelude` module
+
 ## [0.1.3] - 2025-05-08
 
 ### Added
