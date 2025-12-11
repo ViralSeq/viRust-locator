@@ -20,6 +20,62 @@ Options:
 
 -V, --version Print version
 
+## Examples
+
+```bash
+# Basic nucleotide query
+cargo run -- --query "ATGCATGCATGC"
+
+# Amino acid query with SIVmm239 reference
+cargo run -- --query "MHAC" --type-query "aa" --reference "SIVmm239"
+
+# Multiple queries with fast algorithm
+cargo run -- --query "ATGCATGC" "GCATGCAT" --algorithm "2"
+```
+
+## Testing
+
+This project includes comprehensive end-to-end tests for the binary:
+
+### Run all tests:
+
+```bash
+cargo test
+```
+
+### Run integration tests only:
+
+```bash
+cargo test --test integration_tests
+```
+
+### Run performance tests only:
+
+```bash
+cargo test --test performance_tests
+```
+
+### Run the complete test suite:
+
+```bash
+./run_tests.sh
+```
+
+The test suite includes:
+
+- ✅ Basic functionality (nucleotide/amino acid queries)
+- ✅ Reference genome support (HXB2, SIVmm239)
+- ✅ Algorithm variants (1: accurate, 2: fast)
+- ✅ Multiple query support
+- ✅ Error handling and validation
+- ✅ Command-line interface (help, version)
+- ✅ Performance characteristics
+- ✅ Edge cases and boundary conditions
+- ✅ IUPAC ambiguous character support
+- ✅ Case sensitivity handling
+
+See the [tests/README.md](tests/README.md) for detailed testing documentation.
+
 ## License
 
 The package is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).

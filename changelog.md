@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.5] - 2025-12-11
+
+- added integration tests and performance tests
+
 ## [0.1.4] - 2025-06-11
 
 ### Added
